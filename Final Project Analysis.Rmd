@@ -1,0 +1,101 @@
+---
+title: "Final Project Abalysis"
+author: "Blinda Tian"
+date: "12/4/2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+
+#  type of analysis
+final <- rbind(sse_new,snp)
+write.csv(file="~/Desktop/final.csv", final)
+```{r merge}
+final <- read.csv("~/Desktop/final.csv")
+```
+
+# The Mean Absolute Error (MAE)
+measures the average magnitude of the errors in a set of predictions
+Mean Squared Error (NMSE)
+# assumption
+parallel trend
+```{r}
+
+# parallel trend
+# Group is not affected by news (parallel trend on no vaccine news)
+plot(final$Adj.Close[final$News==0&final$Country_treat==1], type="l",col="red",ylim= c(3100,3500),main="No News day",xlab="Time Events",ylab="Index")
+lines(final$Adj.Close[final$News==0&final$Country_treat==0],col="blue")
+
+
+
+# after treatment; affected by news
+plot(final$Adj.Close[final$News==1&final$Country_treat==1], type="l",col="red",ylim= c(3100,3700))
+lines(final$Adj.Close[final$News==1&final$Country_treat==0],col="blue")
+
+
+
+```
+
+
+# DID model
+From my data, I would wish to know whether U.S investors that observe vaccine news will  an increase in buying than Chinese investors;
+ test whether the time effect is different when you intervene compared with when you don't.
+
+
+
+Time is binary (0,1) where 0 is no vaccine news and 1 was days that have vaccine news. 
+Country training is also binary, where 0 is a Chinses stock index and 1 is U.S stock index Income is continuous variable (index)
+
+Coefficients:
+                   Estimate Std. Error t value Pr(>|t|)    
+(Intercept)         3270.14      24.11 135.658  < 2e-16 ***
+News                  22.64      32.50   0.697  0.49051    
+Country_treat        115.21      34.09   3.379  0.00176 ** 
+News:Country_treat   -58.46      45.97  -1.272  0.21160   
+```{r set varibles}
+
+# model DID
+
+final$Diff_ab <- abs(final$Diff)
+didreg <- lm( final$Diff_ab ~   News*Country_treat, data = final)
+summary(didreg)
+
+
+
+
+# validation
+
+mean(didreg$residuals)
+plot(didreg$residuals)
+acf(didreg$residuals)
+lmtest::dwtest(didreg) # reject (there is a autocorrelation)
+#No perfect multicollinearity
+library(car)
+vif(didreg)
+plot(didreg,2) # 21 23 5
+
+final2 <- final[-c(21,23,5),]
+
+# remove outliers
+didreg <- lm( final2$Diff_ab ~   News*Country_treat, data = final2) # less SE 
+summary(didreg)
+
+
+
+
+
+
+
+
+```
+
+
+
+
+# simulation
+```{r}
+plot(didreg$fitted.values)
+```
+
+
