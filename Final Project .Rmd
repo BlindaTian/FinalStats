@@ -1,0 +1,345 @@
+---
+title: "Final"
+author: "Blinda Tian"
+date: "11/22/2020"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+# News data Extract Cleaning
+
+```{r}
+# open file
+vac <- read.csv("~/Desktop/vaccine_n 2.csv")
+dim(vac) # [1] 56  5
+vac$pub_date <- as.Date(vac$pub_date)
+headline <- vac$headline.main # factor
+
+
+# Function for data cleaning
+
+# remove punctuation 
+headline <- gsub('[[:punct:] ]+',' ',headline)
+class(headline) # "character"
+length(headline) # 56
+
+
+
+# eliminate questions mark 
+library(stringr)
+vac_q <- lapply(headline, function(x)"?" %in% str_split(x,pattern = ""))
+sapply(vac_q, sum) # no question mark
+ 
+
+# remove numbers
+library(tm)
+headline <- removeNumbers(headline)
+
+
+
+# break headlines into words
+library(magrittr)
+headline <- str_split(headline, pattern = " ") # list"
+
+
+
+# frequency 
+sort(table(unlist(headline)))
+summary(unlist(headline)) # 708 characters 
+word <- unique(unlist(headline)) #386 unique characters
+length(word) # 377 
+word <- data.frame(word) # list"
+
+
+
+```
+
+
+
+# Stock index extract and clean
+
+cleaning data - - trading days are different 
+Price change graph
+summary on return
+concerns: Serial Correlation in Stock Returns
+Trend:  a dataset has a trend when it has either a long-term increase or decrease. 
+
+```{r grap}
+library("lubridate")
+library(xts)
+# Price Change
+sse <- read.csv("~/Desktop/SSE9.csv")
+snp <- read.csv("~/Desktop/S&P9.csv")
+# ADD one day time lag on Chinese news bc of time zone differences
+sse_new <- read.csv("~/Desktop/sse_new.csv")
+
+
+sse_new$Date <- as.Date(as.character(sse_new$Date))
+sse$Date <- as.Date(as.character(sse$Date))
+snp$Date <- as.Date(as.character(snp$Date))
+
+
+
+colnames(sse)
+#[1] "Date"      "Open"      "High"      "Low"       "Close"    
+#[6] "Adj.Close" "Volume"
+
+
+```
+
+
+```{r stock visualization}
+# graph 1 used !
+library("ggplot2")
+ggplot(snp,aes(Date,Close)) + 
+  geom_line(aes(color="snp")) +
+  geom_line(data=sse,aes(color="sse")) +
+  labs(color="Legend") +
+  scale_colour_manual("", breaks = c("snp", "sse"),
+                          values = c("blue", "brown")) +
+  ggtitle("Closing Stock Prices in September: S&P & SSE") + 
+  theme(plot.title = element_text(lineheight=.7, face="bold"))
+
+
+
+
+
+
+library(tidyverse)
+library(lubridate)
+library(timetk)
+
+acf(diff(sse_new$Adj.Close))
+tsDiff <- diff(sse_new$Adj.Close)
+plot(tsDiff)
+
+
+
+# autocorrelation 
+acf(sse_new$Adj.Close)
+acf(diff(sse_new$Adj.Close))
+acf(snp$Adj.Close)
+acf(diff(snp$Adj.Close))
+
+
+# add diff (normalized)
+diff <- diff(sse_new$Adj.Close) # 21
+sse_new<-sse_new[-1,]
+sse_new$diff <- diff
+
+
+diff <- diff(snp$Adj.Close) # 21
+snp<-snp[-1,]
+snp$diff <- diff
+
+
+#  drop  day 9.7 labor ???? react to days before them??? 
+sse_new <- sse_new[-5,]
+sse_new <- sse_new[-1,] #one day lag
+
+```
+
+```{r stock return}
+# apply the difference to natural logarithms of stock prices, log return of the stock
+library(PerformanceAnalytics)
+
+
+log_re_c <- diff(log(sse$Adj.Close)) # 22 (9.7 market open)
+log_re_c <- log_re_c[-5] # drop that day
+summary(log_re_c)
+sd(log_re_c) # what does it mean SD  0.009754376
+
+
+log_re_c_new <- diff(log(sse_new$Adj.Close)) # 22 (9.7 market open)
+log_re_c_new <- log_re_c[-4] # drop that day
+summary(log_re_c_new)
+sd(log_re_c_new) # what does it mean SD  0.009078349
+
+
+
+log_re_u <- diff(log(snp$Adj.Close))
+summary(log_re_u)
+sd(log_re_u) # what does it mean SD 0.01446959 (larger difference in daily return)
+
+
+
+# correlation between US and Chinese stock (original)
+stock_cor <- cbind(log_re_c,log_re_u)
+chart.Correlation(stock_cor) 
+
+
+
+# correlation between US and Chinese stock (one day lag)
+stock_cor <- cbind(log_re_c_new,log_re_u)
+chart.Correlation(stock_cor) # larger correlation
+
+
+
+
+# modify 
+```
+
+
+
+
+# sentiment analysis
+Sentiment  are generated from textual data alone
+concern: Subjectivity
+```{r}
+
+# sentiment 尝试中
+
+# sentiment lexion libaries
+# The tidytext package contains three sentiment lexicons in the sentiments dataset.
+library(textdata)
+library(tidytext) 
+library(tidyverse)
+library(magrittr)
+library( dplyr)
+
+afinnsentiments = get_sentiments('afinn')
+head(afinnsentiments,10) #2477 vocabs   
+bingsentiments = get_sentiments('bing') #6,776 choose this
+loughransentiments = get_sentiments('loughran') # 4,140 vocabs
+
+
+
+word_sentiment <- word %>% inner_join(bingsentiments,by="word") # 25個
+word["sentiment"] <- c(NA)
+word <- rbind(word_sentiment,word)
+
+
+
+# work on dictionary! (by myself)
+write.csv(file="~/Desktop/word.csv", word)
+word <- read.csv("~/Desktop/word.csv")
+word <- word[,-1]
+word<- word[!is.na(word$sentiment),]
+dim(word) # 48 * 2
+
+
+
+
+# sign based on words w strong sentiment (add positive)
+word_p <- word$word[word$sentiment=="positive"]
+pos <- function (words){
+sum(word_p %in% words)  
+}
+
+which(lapply(words,pos) >1)
+
+vac["sentiment"]<- c(NA)
+vac$sentiment[which(lapply(words,pos)> 1)] <- "positive"
+
+
+# sign based on words w strong sentiment (add negative)
+word_n <- word$word[word$sentiment=="negative"]
+neg <- function (words){
+sum(word_n %in% words)  
+}
+
+
+vac$sentiment[which(lapply(words,neg) >1)] <- "negative"   
+
+
+
+# final goal is given everynews a sentiment score 
+vaccine_n <- read.csv("~/Desktop/vaccine_n.csv")
+
+# finalized sentiments daily here (only those had strong sentiment vocabs) ignore neutral one
+vac_n_final <- vaccine_n[!vaccine_n$Attitude=="o",]
+
+# remove weekends
+vac_n_final$pub_date <- as.POSIXlt(vac_n_final$pub_date,format="%Y-%m-%d", TZ='EST')
+n <- which(vac_n_final$pub_date$wday==6) 
+which(vac_n_final$pub_date$wday==7)
+
+vac_n_final[-n]
+
+length(vac_n_final$Attitude) # 32 has strong attitude 
+
+
+#  Charting Changes in Sentiment Over Time (graph!) 要的!!
+#  This time round, I would like to show how the sentiment score varies across time as well.
+
+vac_n_final$day <- format(as.Date(vac_n_final$pub_date,format="%Y-%m-%d"), format = "%d")
+ggplot(vac_n_final, 
+       aes(x =day , 
+           fill = Attitude)) + geom_bar(position = position_dodge(preserve = "single")) +labs(y = "Sentiment",        x = "Day",
+       title = " Sentiment of News in Sep")
+
+
+vaccine_n$day <- format(as.Date(vaccine_n$pub_date,format="%Y-%m-%d"), format = "%d")
+ggplot(vaccine_n, 
+       aes(x =day , 
+           fill = Attitude)) + geom_bar(position = position_dodge(preserve = "single")) +labs(y = "Sentiment",        x = "Day",
+       title = " Sentiment of News in Sep")
+
+
+
+
+
+
+# simulation the attitude == see accuracy
+# randomly selected NYT frame to varify
+
+
+n<-sample(57,11)
+library("sentimentr")
+actual    <- c(1, 1, 1, -1, 1, 1, -1, 1, 1, -1, 1, 1,1)
+predicted <- c(1, 0, 1, -1, 1, 0, -1, 1, 1, -1, 1, 1,1)
+validate_sentiment(predicted, actual)
+
+
+```
+
+
+# non-news day
+```{r}
+
+sse$day <- format(as.Date(sse$Date,format="%Y-%m-%d"), format = "%d")
+sse_new$day <- format(as.Date(sse_new$Date,format="%Y-%m-%d"), format = "%d")
+snp$day <- format(as.Date(snp$Date,format="%Y-%m-%d"), format = "%d")
+
+
+
+
+# drop no weekdays news
+vac_n_final$day[!vac_n_final$day %in% sse$day] # not trading day news
+n<-which(!vac_n_final$day %in% sse$day)
+vac_n_final <- vac_n_final[-n]
+dim(vac_n_final) # 47 
+
+
+# assign one attitude on a day 
+vac_n_final["score"] <- c(NA)
+vac_n_final$score[vac_n_final$Attitude=="p"] <- 1
+vac_n_final$score[vac_n_final$Attitude=="n"] <- -1
+sentimen_day <- aggregate(score ~ day, data = vac_n_final, sum)
+
+
+
+
+
+# combined trading days (close - open)/open price reaction (daily price change) with news  画个图！！！！！
+sse["Daily change"] <- (sse$Adj.Close-sse$Open)/sse$Open
+sse_new["Daily change"] <- (sse_new$Adj.Close-sse_new$Open)/sse_new$Open
+sse["Country"] <- c("c")
+sse_new["Country"] <- c("c")
+snp["Country"] <- c("us")
+snp["Daily change"] <- (snp$Adj.Close-snp$Open)/snp$Open
+
+
+
+
+#  no news days =  compared! 
+no_news <- sse$day[! sse$day  %in%sentimen_day$day ] 
+
+
+
+```
+
+
+
